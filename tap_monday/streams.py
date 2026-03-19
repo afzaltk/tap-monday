@@ -157,7 +157,7 @@ class BoardsStream(MondayStream):
     def query(self) -> str:
         if self.config.get("board_ids"):
             boards_args = "limit: $board_limit, page: $page, ids: $board_ids, order_by: created_at"
-            query_vars = "($page: Int!, $board_limit: Int!, $board_ids: [ID])"
+            query_vars = "($page: Int!, $board_limit: Int!, $board_ids: [Int])"
         else:
             boards_args = "limit: $board_limit, page: $page, order_by: created_at"
             query_vars = "($page: Int!, $board_limit: Int!)"
@@ -290,6 +290,8 @@ class BoardsStream(MondayStream):
 
     def parse_response(self, response: requests.Response) -> Iterable[dict]:
         resp_json = response.json()
+        if "errors" in resp_json:
+            raise FatalAPIError(f"GraphQL errors: {resp_json['errors']}")
         for row in resp_json["data"]["boards"]:
             yield row
 
