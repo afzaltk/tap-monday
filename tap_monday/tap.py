@@ -50,6 +50,12 @@ class TapMonday(Tap):
             th.ArrayType(th.IntegerType),
             description="List of ids of boards to fetch at once"
         ),
+        th.Property(
+            "items_page_limit",
+            th.IntegerType,
+            default=100,
+            description="The number of items to fetch per board per request"
+        ),
     ).to_dict()
 
     def discover_streams(self) -> List[Stream]:

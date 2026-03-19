@@ -145,16 +145,28 @@ class BoardsStream(MondayStream):
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
-        return {
+        params: Dict[str, Any] = {
             "page": next_page_token or 1,
-            "board_limit": self.config["board_limit"]
+            "board_limit": self.config["board_limit"],
         }
+        if self.config.get("board_ids"):
+            params["board_ids"] = self.config["board_ids"]
+        return params
 
     @property
     def query(self) -> str:
-        graph_query = """ 
-            query ($page: Int!, $board_limit: Int!) {
-                boards(limit: $board_limit, page: $page, order_by: created_at) {
+        if self.config.get("board_ids"):
+            boards_args = "limit: $board_limit, page: $page, ids: $board_ids, order_by: created_at"
+            query_vars = "($page: Int!, $board_limit: Int!, $board_ids: [ID])"
+        else:
+            boards_args = "limit: $board_limit, page: $page, order_by: created_at"
+            query_vars = "($page: Int!, $board_limit: Int!)"
+
+        items_page_limit = self.config.get("items_page_limit", 100)
+
+        graph_query = f"""
+            query {query_vars} {{
+                boards({boards_args}) {{
                     id
                     name
                     description
@@ -164,110 +176,110 @@ class BoardsStream(MondayStream):
                     board_kind
                     communication
 
-                    creator {
+                    creator {{
                         id
                         name
                         email
-                    }
+                    }}
 
-                    groups {
+                    groups {{
                         id
                         title
-                    }
+                    }}
 
                     item_terminology
                     items_count
 
-                    items_page(limit: 500) {
-                        items {
+                    items_page(limit: {items_page_limit}) {{
+                        items {{
                             id
                             name
-                            column_values {
+                            column_values {{
                                 id
                                 text
                                 type
                                 value
-                            }
-                        }
-                    }
+                            }}
+                        }}
+                    }}
 
-                    owners {
+                    owners {{
                         id
                         name
                         email
-                    }
+                    }}
 
                     permissions
-                    subscribers {
+                    subscribers {{
                         id
                         name
                         email
-                    }
+                    }}
 
-                    tags {
+                    tags {{
                         id
                         name
-                    }
+                    }}
 
-                    team_owners {
+                    team_owners {{
                         id
                         name
-                    }
+                    }}
 
-                    team_subscribers {
+                    team_subscribers {{
                         id
                         name
-                    }
+                    }}
 
-                    top_group {
+                    top_group {{
                         id
                         title
-                    }
+                    }}
 
                     type
                     url
 
-                    updates {
+                    updates {{
                         id
                         body
                         created_at
-                        creator {
+                        creator {{
                             id
                             name
-                        }
-                    }
+                        }}
+                    }}
 
-                    views {
+                    views {{
                         id
                         name
                         type
                         settings_str
                         view_specific_data_str
-                    }
+                    }}
 
-                    workspace {
+                    workspace {{
                         id
                         name
-                    }
+                    }}
 
                     workspace_id
 
-                    columns {
+                    columns {{
                         id
                         title
                         type
-                    }
+                    }}
 
-                    activity_logs {
+                    activity_logs {{
                         id
                         entity
                         event
                         data
                         user_id
                         created_at
-                    }
-                }
-            }
+                    }}
+                }}
+            }}
         """
         return graph_query
 
