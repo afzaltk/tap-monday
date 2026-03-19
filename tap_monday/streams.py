@@ -191,6 +191,7 @@ class BoardsStream(MondayStream):
                     items_count
 
                     items_page(limit: {items_page_limit}) {{
+                        cursor
                         items {{
                             id
                             name
@@ -288,11 +289,52 @@ class BoardsStream(MondayStream):
     #         "board_id": record["id"],
     #     }
 
+    def _fetch_all_items(self, initial_items: list, cursor: str) -> list:
+        """Page through next_items_page until cursor is exhausted."""
+        all_items = list(initial_items)
+        items_page_limit = self.config.get("items_page_limit", 100)
+        while cursor:
+            query = f"""
+                query {{
+                    next_items_page(limit: {items_page_limit}, cursor: "{cursor}") {{
+                        cursor
+                        items {{
+                            id
+                            name
+                            column_values {{
+                                id
+                                text
+                                type
+                                value
+                            }}
+                        }}
+                    }}
+                }}
+            """
+            resp = self.requests_session.post(
+                self.url_base,
+                json={"query": query},
+                headers=self.http_headers,
+            )
+            resp_json = resp.json()
+            if "errors" in resp_json:
+                raise FatalAPIError(f"GraphQL errors (next_items_page): {resp_json['errors']}")
+            next_page = resp_json["data"]["next_items_page"]
+            all_items.extend(next_page["items"])
+            cursor = next_page.get("cursor")
+        return all_items
+
     def parse_response(self, response: requests.Response) -> Iterable[dict]:
         resp_json = response.json()
         if "errors" in resp_json:
             raise FatalAPIError(f"GraphQL errors: {resp_json['errors']}")
         for row in resp_json["data"]["boards"]:
+            items_page = row.get("items_page", {})
+            cursor = items_page.get("cursor")
+            if cursor:
+                row["items_page"]["items"] = self._fetch_all_items(
+                    items_page.get("items", []), cursor
+                )
             yield row
 
     # def post_process(self, row: dict, context: Optional[dict] = None) -> dict:
