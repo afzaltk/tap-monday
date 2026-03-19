@@ -157,7 +157,7 @@ class BoardsStream(MondayStream):
     def query(self) -> str:
         if self.config.get("board_ids"):
             boards_args = "limit: $board_limit, page: $page, ids: $board_ids, order_by: created_at"
-            query_vars = "($page: Int!, $board_limit: Int!, $board_ids: [Int])"
+            query_vars = "($page: Int!, $board_limit: Int!, $board_ids: [ID!])"
         else:
             boards_args = "limit: $board_limit, page: $page, order_by: created_at"
             query_vars = "($page: Int!, $board_limit: Int!)"
