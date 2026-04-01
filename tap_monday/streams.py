@@ -1,6 +1,7 @@
 """Stream type classes for tap-monday."""
 
 from typing import Any, Optional, Dict, Iterable
+import time
 
 import requests
 from singer_sdk import typing as th
@@ -293,6 +294,8 @@ class BoardsStream(MondayStream):
         """Page through next_items_page until cursor is exhausted."""
         all_items = list(initial_items)
         items_page_limit = self.config.get("items_page_limit", 100)
+        max_retries = 5
+        retry_delay = 30  # seconds
         while cursor:
             query = f"""
                 query {{
@@ -311,14 +314,28 @@ class BoardsStream(MondayStream):
                     }}
                 }}
             """
-            resp = self.requests_session.post(
-                self.url_base,
-                json={"query": query},
-                headers=self.http_headers,
-            )
-            resp_json = resp.json()
-            if "errors" in resp_json:
-                raise FatalAPIError(f"GraphQL errors (next_items_page): {resp_json['errors']}")
+            for attempt in range(max_retries):
+                resp = self.requests_session.post(
+                    self.url_base,
+                    json={"query": query},
+                    headers=self.http_headers,
+                )
+                resp_json = resp.json()
+                if "errors" not in resp_json:
+                    break
+                errors = resp_json["errors"]
+                is_transient = any(
+                    e.get("extensions", {}).get("code") in ("INTERNAL_SERVER_ERROR",)
+                    for e in errors
+                )
+                if is_transient and attempt < max_retries - 1:
+                    self.logger.warning(
+                        f"Transient error on next_items_page (attempt {attempt + 1}/{max_retries}), "
+                        f"retrying in {retry_delay}s: {errors}"
+                    )
+                    time.sleep(retry_delay)
+                else:
+                    raise FatalAPIError(f"GraphQL errors (next_items_page): {errors}")
             next_page = resp_json["data"]["next_items_page"]
             all_items.extend(next_page["items"])
             cursor = next_page.get("cursor")
