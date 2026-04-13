@@ -320,7 +320,20 @@ class BoardsStream(MondayStream):
                     json={"query": query},
                     headers=self.http_headers,
                 )
-                resp_json = resp.json()
+                try:
+                    resp_json = resp.json()
+                except Exception:
+                    if attempt < max_retries - 1:
+                        self.logger.warning(
+                            f"Empty/invalid response on next_items_page (attempt {attempt + 1}/{max_retries}, "
+                            f"status={resp.status_code}), retrying in {retry_delay}s"
+                        )
+                        time.sleep(retry_delay)
+                        continue
+                    raise FatalAPIError(
+                        f"Empty/invalid response on next_items_page after {max_retries} attempts "
+                        f"(status={resp.status_code})"
+                    )
                 if "errors" not in resp_json:
                     break
                 errors = resp_json["errors"]
